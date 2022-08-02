@@ -85,17 +85,16 @@ def get_weight_file(cfg: edict) -> str:
     else:
         model_params_path = cfg.param.model_params_path
 
-    model_dir = osp.join(cfg.ymir.input.root_dir,
-                         cfg.ymir.input.models_dir)
-    model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p))]
+    model_dir = cfg.ymir.input.models_dir
+    model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p)) and p.endswith('.pt')]
 
     # choose weight file by priority, best.pt > xxx.pt
-    if 'best.pt' in model_params_path:
-        return osp.join(model_dir, 'best.pt')
-    else:
-        for f in model_params_path:
-            if f.endswith('.pt'):
-                return osp.join(model_dir, f)
+    for f in model_params_path:
+        if f.endswith('best.pt'):
+            return osp.join(model_dir, f)
+
+    if len(model_params_path) > 0:
+        return osp.join(model_dir, max(model_params_path, key=osp.getctime))
 
     return ""
 
@@ -128,20 +127,28 @@ class YmirYolov5():
         self.model = self.init_detector(device)
         self.device = device
         self.class_names = cfg.param.class_names
-        self.stride = self.model.stride
+        self.stride = int(self.model.stride.max())
         self.conf_thres = float(cfg.param.conf_thres)
         self.iou_thres = float(cfg.param.iou_thres)
 
         img_size = int(cfg.param.img_size)
-        imgsz = (img_size, img_size)
-        imgsz = check_img_size(imgsz, s=self.stride)
+        # imgsz = (img_size, img_size)
+        imgsz = check_img_size(img_size, s=self.stride)
+        self.img_size = (imgsz, imgsz)
 
-        self.model.warmup(imgsz=(1, 3, *imgsz), half=False)  # warmup
-        self.img_size = imgsz
+        self.half = device.type != 'cpu'  # half precision only supported on CUDA
+        if self.half:
+            self.model.half()
+
+        if self.half:
+            # Run inference, warm up
+            self.model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(self.model.parameters())))
 
     def init_detector(self, device: torch.device) -> Ensemble:
         weights = get_weight_file(self.cfg)
 
+        if not weights:
+            raise Exception('not weights file found!!')
         model = attempt_load(weights, map_location=device)
         # data_yaml = osp.join(self.cfg.ymir.output.root_dir, 'data.yaml')
         # model = DetectMultiBackend(weights=weights,
@@ -163,10 +170,10 @@ class YmirYolov5():
         img1 = img1.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img1 = np.ascontiguousarray(img1)
         img1 = torch.from_numpy(img1).to(self.device)
-
+        img1 = img1.half() if self.half else img1.float()
         img1 = img1 / 255  # 0 - 255 to 0.0 - 1.0
         img1.unsqueeze_(dim=0)  # expand for batch dim
-        pred = self.model(img1)
+        pred = self.model(img1)[0]
 
         # postprocess
         conf_thres = self.conf_thres
