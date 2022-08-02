@@ -141,9 +141,8 @@ def _run_training(cfg: edict) -> None:
     logging.info(f'start training: {commands}')
 
     subprocess.run(commands, check=True)
-    monitor.write_monitor_logger(
-        percent=get_ymir_process(stage=YmirStage.TASK, p=1.0))
 
+    # save other files in output directory
     write_ymir_training_result(cfg)
     # if task done, write 100% percent log
     monitor.write_monitor_logger(percent=1.0)

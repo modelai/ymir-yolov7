@@ -6,8 +6,9 @@
 - modify `utils/datasets.py` to support ymir dataset format
 
 
-## ymir dataset format
+## support ymir dataset format
 - use `convert_ymir_to_yolov5` to generate `data.yaml`
+
 - modify `utils/datasets.py` load `train.tsv`, `val.tsv`
 ```
 # support ymir index file `train.tsv` and `val.tsv`
@@ -46,3 +47,55 @@ l[:,2] = (l_ymir[:,2] + l_ymir[:,4])/2/height
 l[:,3] = (l_ymir[:,3] - l_ymir[:,1])/width
 l[:,4] = (l_ymir[:,4] - l_ymir[:,2])/height
 ```
+
+## write monitor and training results
+
+modify `train.py`
+- import functions
+```
+from ymir.ymir_yolov5 import get_merged_config, YmirStage, get_ymir_process
+from ymir_exc import monitor
+from ymir_exc import result_writer as rw
+```
+
+- write tensorboard results
+```
+# change tensorboard writer log_dir
+ymir_cfg = get_merged_config()
+tb_writer = SummaryWriter(ymir_cfg.ymir.output.tensorboard_dir)  # Tensorboard
+```
+
+- monitor training process
+```
+# for each epoch
+monitor_gap = max(1, (epochs - start_epoch)//1000)
+if rank in [-1, 0] and epoch % monitor_gap == 0:
+    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.TASK, p=(epoch-start_epoch)/(epochs-start_epoch)))
+```
+
+- write `result.yaml` to save model weights and map50
+    - optional: modify `utils/metrics.py` fitness() to save best map50
+    ```
+    def fitness(x):
+        # Model fitness as a weighted combination of metrics
+        w = [0.0, 0.0, 1.0, 0.0]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95]
+        return (x[:, :4] * w).sum(1)
+    ```
+```
+if (epoch + 1) % opt.save_period == 0:
+    epoch_weight_file = wdir / 'epoch_{:03d}.pt'.format(epoch)
+    torch.save(ckpt, epoch_weight_file)
+    write_ymir_training_result(ymir_cfg, map50=float(results[2]), epoch=epoch, weight_file=str(epoch_weight_file))
+```
+
+- modify `start.py` save other output files
+```
+# save other files in output directory
+write_ymir_training_result(cfg)
+# if task done, write 100% percent log
+monitor.write_monitor_logger(percent=1.0)
+```
+
+## infer and mining
+- view `ymir/start.py` "_run_infer()" for infer
+- view `ymir/start.py` "_run_mining()" for mining

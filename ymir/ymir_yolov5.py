@@ -231,7 +231,7 @@ def write_ymir_training_result(cfg: edict,
                                map50: float = 0.0,
                                epoch: int = 0,
                                weight_file: str = "") -> None:
-    YMIR_VERSION = os.getenv('YMIR_VERSION', '1.2.0')
+    YMIR_VERSION = os.getenv('YMIR_VERSION', '1.1.0')
     if Version(YMIR_VERSION) >= Version('1.2.0'):
         _write_latest_ymir_training_result(cfg, map50, epoch, weight_file)
     else:
@@ -253,7 +253,7 @@ def _write_latest_ymir_training_result(cfg: edict,
     2. save weight file for last.pt, best.pt and other config file
     3. save weight file for best.onnx, no valid map50, attach to stage f"{model}_last_and_best"
     """
-    model = cfg.param.model
+    model = osp.splitext(osp.basename(cfg.param.cfg_file))[0]
     # use `rw.write_training_result` to save training result
     if weight_file:
         rw.write_model_stage(stage_name=f"{model}_{epoch}",
@@ -279,7 +279,7 @@ def _write_ancient_ymir_training_result(cfg: edict, map50: float) -> None:
     """
     for 1.0.0 <= ymir <=1.1.0
     """
-
+    model = osp.splitext(osp.basename(cfg.param.cfg_file))[0]
     files = [osp.basename(f) for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))]
     training_result_file = cfg.ymir.output.training_result_file
     if osp.exists(training_result_file):
@@ -292,7 +292,7 @@ def _write_ancient_ymir_training_result(cfg: edict, map50: float) -> None:
         training_result = {
             'model': files,
             'map': map50,
-            'stage_name': f'{cfg.param.model}'
+            'stage_name': f'{model}'
         }
 
     env_config = env.get_current_env()
