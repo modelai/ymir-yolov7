@@ -31,6 +31,6 @@ RUN pip install -r /yolov7/requirements.txt && \
     mv /yolov7/ymir/img-man/*.yaml /img-man && \
     echo "cd /yolov7 && python3 ymir/start.py" > /usr/bin/start.sh
 
-# overwrite entrypoint to avoid docker image import error.
+# overwrite entrypoint to avoid ymir1.1.0 import docker image error.
 ENTRYPOINT []
 CMD bash /usr/bin/start.sh

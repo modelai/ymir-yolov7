@@ -1,5 +1,12 @@
 # ymir-yolov5
 
+```
+docker pull youdaoyzbx/ymir-executor:ymir1.1.0-yolov7-cu111-tmi
+
+docker build -t ymir/executor:yolov7-cu111-tmi --build-arg YMIR=1.1.0 -f ymir/docker/cuda111.dockerfile .
+```
+
+
 ## change log
 - add `ymir` folder
 - modify `train.py` to write `monitor.txt` and `result.yaml`
