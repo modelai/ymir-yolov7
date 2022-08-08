@@ -6,7 +6,7 @@ import os
 import os.path as osp
 import shutil
 from enum import IntEnum
-from typing import Any, Dict, List, Tuple
+from typing import Any, List
 
 from easydict import EasyDict as edict
 import numpy as np
