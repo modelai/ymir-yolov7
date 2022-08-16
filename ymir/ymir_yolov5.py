@@ -8,20 +8,19 @@ import shutil
 from enum import IntEnum
 from typing import Any, List
 
-from easydict import EasyDict as edict
 import numpy as np
 import torch
 import yaml
+from easydict import EasyDict as edict
 from nptyping import NDArray, Shape, UInt8
 from packaging.version import Version
 from ymir_exc import env
 from ymir_exc import result_writer as rw
 
-from models.experimental import attempt_download
+from models.experimental import Ensemble, attempt_load
 from utils.datasets import letterbox
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.torch_utils import select_device
-from models.experimental import attempt_load, Ensemble
 
 
 class YmirStage(IntEnum):
@@ -64,21 +63,22 @@ def get_ymir_process(stage: YmirStage, p: float, task_idx: int = 0, task_num: in
 
 def get_merged_config() -> edict:
     """
-    merge ymir_config and executor_config
+    merge config from /in/env.yaml and /in/config.yaml
     """
     merged_cfg = edict()
-    # the hyperparameter information
+    # the hyperparameter information, from /in/config.yaml
     merged_cfg.param = env.get_executor_config()
 
-    # the ymir path information
+    # the ymir path information, from /in/env.yaml
     merged_cfg.ymir = env.get_current_env()
     return merged_cfg
 
 
 def get_weight_file(cfg: edict) -> str:
     """
-    return the weight file path by priority
+    cfg: from get_merged_config()
     find weight file in cfg.param.model_params_path or cfg.param.model_params_path
+    return the weight file path by priority
     """
     if cfg.ymir.run_training:
         model_params_path = cfg.param.get('pretrained_model_params', [])
@@ -86,7 +86,8 @@ def get_weight_file(cfg: edict) -> str:
         model_params_path = cfg.param.model_params_path
 
     model_dir = cfg.ymir.input.models_dir
-    model_params_path = [p for p in model_params_path if osp.exists(osp.join(model_dir, p)) and p.endswith('.pt')]
+    model_params_path = [p for p in model_params_path if osp.exists(
+        osp.join(model_dir, p)) and p.endswith('.pt')]
 
     # choose weight file by priority, best.pt > xxx.pt
     for f in model_params_path:
@@ -99,12 +100,7 @@ def get_weight_file(cfg: edict) -> str:
     return ""
 
 
-def download_weight_file(model_name):
-    weights = attempt_download(f'{model_name}.pt')
-    return weights
-
-
-class YmirYolov5():
+class YmirYolov5(object):
     """
     used for mining and inference to init detector and predict.
     """
@@ -142,7 +138,8 @@ class YmirYolov5():
 
         if self.half:
             # Run inference, warm up
-            self.model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(self.model.parameters())))
+            self.model(torch.zeros(1, 3, imgsz, imgsz).to(
+                device).type_as(next(self.model.parameters())))
 
     def init_detector(self, device: torch.device) -> Ensemble:
         weights = get_weight_file(self.cfg)
@@ -150,12 +147,6 @@ class YmirYolov5():
         if not weights:
             raise Exception('not weights file found!!')
         model = attempt_load(weights, map_location=device)
-        # data_yaml = osp.join(self.cfg.ymir.output.root_dir, 'data.yaml')
-        # model = DetectMultiBackend(weights=weights,
-        #                            device=device,
-        #                            dnn=False,  # not use opencv dnn for onnx inference
-        #                            data=data_yaml)  # dataset.yaml path
-
         return model
 
     def predict(self, img: CV_IMAGE) -> NDArray:
@@ -182,13 +173,15 @@ class YmirYolov5():
         agnostic_nms = False
         max_det = 1000
 
-        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
+        pred = non_max_suppression(
+            pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
 
         result = []
         for det in pred:
             if len(det):
                 # Rescale boxes from img_size to img size
-                det[:, :4] = scale_coords(img1.shape[2:], det[:, :4], img.shape).round()
+                det[:, :4] = scale_coords(
+                    img1.shape[2:], det[:, :4], img.shape).round()
                 result.append(det)
 
         # xyxy, conf, cls
@@ -246,9 +239,9 @@ def write_ymir_training_result(cfg: edict,
 
 
 def _write_latest_ymir_training_result(cfg: edict,
-                                      map50: float,
-                                      epoch: int,
-                                      weight_file: str) -> None:
+                                       map50: float,
+                                       epoch: int,
+                                       weight_file: str) -> None:
     """
     for ymir>=1.2.0
     cfg: ymir config
@@ -276,7 +269,7 @@ def _write_latest_ymir_training_result(cfg: edict,
             with open(cfg.ymir.output.training_result_file, 'r') as f:
                 training_result = yaml.safe_load(stream=f)
 
-            map50 = max(training_result.get('map',0.0), map50)
+            map50 = max(training_result.get('map', 0.0), map50)
         rw.write_model_stage(stage_name=f"{model}_last_and_best",
                              files=files,
                              mAP=float(map50))
@@ -287,7 +280,8 @@ def _write_ancient_ymir_training_result(cfg: edict, map50: float) -> None:
     for 1.0.0 <= ymir <=1.1.0
     """
     model = osp.splitext(osp.basename(cfg.param.cfg_file))[0]
-    files = [osp.basename(f) for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))]
+    files = [osp.basename(f) for f in glob.glob(
+        osp.join(cfg.ymir.output.models_dir, '*'))]
     training_result_file = cfg.ymir.output.training_result_file
     if osp.exists(training_result_file):
         with open(cfg.ymir.output.training_result_file, 'r') as f:

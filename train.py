@@ -21,6 +21,8 @@ from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+from ymir_exc import monitor
+from ymir_exc import result_writer as rw
 
 from models.experimental import attempt_load
 from models.yolo import Model
@@ -38,9 +40,9 @@ from utils.plots import plot_evolution, plot_images, plot_labels, plot_results
 from utils.torch_utils import (ModelEMA, intersect_dicts, is_parallel,
                                select_device, torch_distributed_zero_first)
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
-from ymir.ymir_yolov5 import get_merged_config, YmirStage, get_ymir_process, write_ymir_training_result
-from ymir_exc import monitor
-from ymir_exc import result_writer as rw
+from ymir.ymir_yolov5 import (YmirStage, get_merged_config, get_ymir_process,
+                              write_ymir_training_result)
+
 logger = logging.getLogger(__name__)
 
 

@@ -1,8 +1,17 @@
+"""
+docker entrypoint is "CMD bash /usr/bin/start.sh"
+/usr/bin/start.sh will call "python3 ymir/start.py"
+
+main() --> start() --> _run_training() | _run_mining() | _run_infer()
+
+mining and infer task can run at the same time.
+"""
 import logging
 import os
 import os.path as osp
 import subprocess
 import sys
+from typing import List
 
 import cv2
 from easydict import EasyDict as edict
@@ -10,9 +19,10 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
+from models.experimental import attempt_download
 from ymir.ymir_yolov5 import (YmirStage, YmirYolov5, convert_ymir_to_yolov5,
-                              download_weight_file, get_merged_config,
-                              get_weight_file, get_ymir_process, write_ymir_training_result)
+                              get_merged_config, get_weight_file,
+                              get_ymir_process, write_ymir_training_result)
 
 
 def start() -> int:
@@ -33,6 +43,7 @@ def start() -> int:
             infer_task_idx = 0
             task_num = 1
 
+        # task_idx and task_num will change the percent for monitor
         if cfg.ymir.run_mining:
             _run_mining(cfg, mining_task_idx, task_num)
         if cfg.ymir.run_infer:
@@ -40,17 +51,24 @@ def start() -> int:
 
     return 0
 
-def get_bool(cfg: edict, key: str, default_value: bool=True) -> bool:
+
+def _get_bool(cfg: edict, key: str, default_value: bool = True) -> bool:
     v = cfg.param.get(key, default_value)
 
     if isinstance(v, str):
-        if v.lower() in ['f', 'false']:
+        if v.lower() in ['f', 'false', '1']:
             v = False
-        elif v.lower() in ['t', 'true']:
+        elif v.lower() in ['t', 'true', '0']:
             v = True
         else:
             raise Exception(f'unknown bool str {key} = {v}')
-    return v
+    elif isinstance(v, int):
+        return bool(v)
+    elif isinstance(v, bool):
+        return v
+    else:
+        raise Exception(f'unknown bool type {key} = {v} ({type(v)})')
+
 
 def _run_training(cfg: edict) -> None:
     """
@@ -60,40 +78,40 @@ def _run_training(cfg: edict) -> None:
     3. save model weight/hyperparameter/... to design directory
     """
     # 1. convert dataset
-    out_dir = cfg.ymir.output.root_dir
+    out_dir: str = cfg.ymir.output.root_dir
     convert_ymir_to_yolov5(cfg)
     logging.info(f'generate {out_dir}/data.yaml')
     monitor.write_monitor_logger(
         percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
 
     # 2. training model
-    epochs = cfg.param.epochs
-    batch_size = cfg.param.batch_size
-    img_size = cfg.param.img_size
-    save_weight_file_num = cfg.param.get('save_weight_file_num', 1)
-    args_options = cfg.param.get('args_options','')
-    gpu_id = str(cfg.param.gpu_id)
-    gpu_count = len(gpu_id.split(',')) if gpu_id else 0
-    port = int(cfg.param.get('port', 29500))
-    sync_bn = get_bool(cfg, 'sync_bn', False)
-    workers = int(cfg.param.get('workers', 8))
-    cfg_file = cfg.param.get('cfg_file', 'cfg/training/yolov7-tiny.yaml')
-    hyp_file = cfg.param.get('hyp_file', 'data/hyp.scratch.tiny.yaml')
-    cache_images = get_bool(cfg, 'cache_images', True)
-    exist_ok = get_bool(cfg, 'exist_ok', True)
+    epochs: int = int(cfg.param.epochs)
+    batch_size: int = int(cfg.param.batch_size)
+    img_size: int = int(cfg.param.img_size)
+    save_weight_file_num: int = int(cfg.param.get('save_weight_file_num', 1))
+    args_options: str = cfg.param.get('args_options', '')
+    gpu_id: str = str(cfg.param.gpu_id)
+    gpu_count: int = len(gpu_id.split(',')) if gpu_id else 0
+    port: int = int(cfg.param.get('port', 29500))
+    sync_bn: bool = _get_bool(cfg, 'sync_bn', False)
+    workers: int = int(cfg.param.get('workers', 8))
+    cfg_file: str = cfg.param.get('cfg_file', 'cfg/training/yolov7-tiny.yaml')
+    hyp_file: str = cfg.param.get('hyp_file', 'data/hyp.scratch.tiny.yaml')
+    cache_images: bool = _get_bool(cfg, 'cache_images', True)
+    exist_ok: bool = _get_bool(cfg, 'exist_ok', True)
 
-    weights = get_weight_file(cfg)
+    weights: str = get_weight_file(cfg)
     if not weights:
         # download pretrained weight from https://github.com/WongKinYiu/yolov7
         downloaded_model_name = osp.splitext(osp.basename(cfg_file))[0]
-        download_weight_file(downloaded_model_name)
         weights = f"{downloaded_model_name}.pt"
+        attempt_download(weights)
 
-    models_dir = cfg.ymir.output.models_dir
-    project = osp.dirname(models_dir)
-    name = osp.basename(models_dir)
+    models_dir: str = cfg.ymir.output.models_dir
+    project: str = osp.dirname(models_dir)
+    name: str = osp.basename(models_dir)
 
-    commands = ['python3']
+    commands: List[str] = ['python3']
     if gpu_count == 0:
         device = 'cpu'
     elif gpu_count == 1:
@@ -127,7 +145,7 @@ def _run_training(cfg: edict) -> None:
         commands.append("--nosave")
     else:
         save_period = max(1, epochs//save_weight_file_num)
-        commands +=['--save_period', str(save_period)]
+        commands += ['--save_period', str(save_period)]
 
     if cache_images:
         commands.append("--cache-images")
@@ -149,10 +167,7 @@ def _run_training(cfg: edict) -> None:
 
 
 def _run_mining(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
-    # generate data.yaml for mining
-    out_dir = cfg.ymir.output.root_dir
-    # convert_ymir_to_yolov5(cfg)
-    # logging.info(f'generate {out_dir}/data.yaml')
+    del cfg
     monitor.write_monitor_logger(percent=get_ymir_process(
         stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
 
@@ -164,10 +179,6 @@ def _run_mining(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
 
 
 def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
-    # generate data.yaml for infer
-    out_dir = cfg.ymir.output.root_dir
-    # convert_ymir_to_yolov5(cfg)
-    # logging.info(f'generate {out_dir}/data.yaml')
     monitor.write_monitor_logger(percent=get_ymir_process(
         stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
 
@@ -199,5 +210,6 @@ if __name__ == '__main__':
                         datefmt='%Y%m%d-%H:%M:%S',
                         level=logging.INFO)
 
+    # https://github.com/protocolbuffers/protobuf/issues/10051
     os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
     sys.exit(start())

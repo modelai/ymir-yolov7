@@ -6,8 +6,8 @@ import sys
 from typing import Dict, List, Tuple
 
 import cv2
-from easydict import EasyDict as edict
 import numpy as np
+from easydict import EasyDict as edict
 from nptyping import NDArray
 from scipy.stats import entropy
 from tqdm import tqdm
@@ -15,8 +15,10 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from ymir.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from ymir.ymir_yolov5 import BBOX, CV_IMAGE, YmirYolov5, YmirStage, get_ymir_process, get_merged_config
+from ymir.data_augment import (cutout, horizontal_flip, intersect, resize,
+                               rotate)
+from ymir.ymir_yolov5 import (BBOX, CV_IMAGE, YmirStage, YmirYolov5,
+                              get_merged_config, get_ymir_process)
 
 
 def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
