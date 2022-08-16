@@ -23,11 +23,13 @@ def intersect(boxes1: BBOX, boxes2: BBOX) -> NDArray:
     '''
     n1 = boxes1.shape[0]
     n2 = boxes2.shape[0]
-    max_xy = np.minimum(np.expand_dims(boxes1[:, 2:], axis=1).repeat(n2, axis=1),
-                        np.expand_dims(boxes2[:, 2:], axis=0).repeat(n1, axis=0))
+    max_xy = np.minimum(
+        np.expand_dims(boxes1[:, 2:], axis=1).repeat(n2, axis=1),
+        np.expand_dims(boxes2[:, 2:], axis=0).repeat(n1, axis=0))
 
-    min_xy = np.maximum(np.expand_dims(boxes1[:, :2], axis=1).repeat(n2, axis=1),
-                        np.expand_dims(boxes2[:, :2], axis=0).repeat(n1, axis=0))
+    min_xy = np.maximum(
+        np.expand_dims(boxes1[:, :2], axis=1).repeat(n2, axis=1),
+        np.expand_dims(boxes2[:, :2], axis=0).repeat(n1, axis=0))
     inter = np.clip(max_xy - min_xy, a_min=0, a_max=None)  # (n1, n2, 2)
     return inter[:, :, 0] * inter[:, :, 1]  # (n1, n2)
 
@@ -50,8 +52,12 @@ def horizontal_flip(image: CV_IMAGE, bbox: BBOX) \
     return image, bbox
 
 
-def cutout(image: CV_IMAGE, bbox: BBOX, cut_num: int = 2, fill_val: int = 0,
-           bbox_remove_thres: float = 0.4, bbox_min_thres: float = 0.1) -> Tuple[CV_IMAGE, BBOX]:
+def cutout(image: CV_IMAGE,
+           bbox: BBOX,
+           cut_num: int = 2,
+           fill_val: int = 0,
+           bbox_remove_thres: float = 0.4,
+           bbox_min_thres: float = 0.1) -> Tuple[CV_IMAGE, BBOX]:
     '''
         Cutout augmentation
         image: A PIL image
@@ -80,7 +86,10 @@ def cutout(image: CV_IMAGE, bbox: BBOX, cut_num: int = 2, fill_val: int = 0,
         right = left + cutout_size_w
         top = random.uniform(0, original_h - cutout_size_h)
         bottom = top + cutout_size_h
-        cutout = np.array([[float(left), float(top), float(right), float(bottom)]])
+        cutout = np.array(
+            [[float(left),
+              float(top), float(right),
+              float(bottom)]])
 
         # Calculate intersect between cutout and bounding boxes
         overlap_size = intersect(cutout, bbox)
@@ -97,7 +106,9 @@ def cutout(image: CV_IMAGE, bbox: BBOX, cut_num: int = 2, fill_val: int = 0,
     return image, bbox
 
 
-def rotate(image: CV_IMAGE, bbox: BBOX, rot: float = 5) -> Tuple[CV_IMAGE, BBOX]:
+def rotate(image: CV_IMAGE,
+           bbox: BBOX,
+           rot: float = 5) -> Tuple[CV_IMAGE, BBOX]:
     image = image.copy()
     bbox = bbox.copy()
     h, w, _ = image.shape
@@ -131,7 +142,8 @@ def get_dir(src_point: NDArray, rot_rad: float) -> List:
     return src_result
 
 
-def transform_preds(coords: NDArray, center: NDArray, scale: Any, rot: float, output_size: List) -> NDArray:
+def transform_preds(coords: NDArray, center: NDArray, scale: Any, rot: float,
+                    output_size: List) -> NDArray:
     trans = get_affine_transform(center, scale, rot, output_size, inv=True)
     target_coords = affine_transform(coords, trans)
     return target_coords
@@ -179,7 +191,9 @@ def affine_transform(pt: NDArray, t: NDArray) -> NDArray:
     return new_pt[:2]
 
 
-def resize(img: CV_IMAGE, boxes: BBOX, ratio: float = 0.8) -> Tuple[CV_IMAGE, BBOX]:
+def resize(img: CV_IMAGE,
+           boxes: BBOX,
+           ratio: float = 0.8) -> Tuple[CV_IMAGE, BBOX]:
     """
     ratio: <= 1.0
     """

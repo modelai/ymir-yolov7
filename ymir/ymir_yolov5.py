@@ -17,7 +17,7 @@ from packaging.version import Version
 from ymir_exc import env
 from ymir_exc import result_writer as rw
 
-from models.experimental import Ensemble, attempt_load
+from models.experimental import attempt_load
 from utils.datasets import letterbox
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.torch_utils import select_device
@@ -25,7 +25,7 @@ from utils.torch_utils import select_device
 
 class YmirStage(IntEnum):
     PREPROCESS = 1  # convert dataset
-    TASK = 2    # training/mining/infer
+    TASK = 2  # training/mining/infer
     POSTPROCESS = 3  # export model
 
 
@@ -33,7 +33,10 @@ BBOX = NDArray[Shape['*,4'], Any]
 CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
 
 
-def get_ymir_process(stage: YmirStage, p: float, task_idx: int = 0, task_num: int = 1) -> float:
+def get_ymir_process(stage: YmirStage,
+                     p: float,
+                     task_idx: int = 0,
+                     task_num: int = 1) -> float:
     """
     stage: pre-process/task/post-process
     p: percent for stage
@@ -56,7 +59,8 @@ def get_ymir_process(stage: YmirStage, p: float, task_idx: int = 0, task_num: in
     elif stage == YmirStage.TASK:
         return init + (PREPROCESS_PERCENT + TASK_PERCENT * p) * ratio
     elif stage == YmirStage.POSTPROCESS:
-        return init + (PREPROCESS_PERCENT + TASK_PERCENT + POSTPROCESS_PERCENT * p) * ratio
+        return init + (PREPROCESS_PERCENT + TASK_PERCENT +
+                       POSTPROCESS_PERCENT * p) * ratio
     else:
         raise NotImplementedError(f'unknown stage {stage}')
 
@@ -86,8 +90,10 @@ def get_weight_file(cfg: edict) -> str:
         model_params_path = cfg.param.model_params_path
 
     model_dir = cfg.ymir.input.models_dir
-    model_params_path = [p for p in model_params_path if osp.exists(
-        osp.join(model_dir, p)) and p.endswith('.pt')]
+    model_params_path = [
+        p for p in model_params_path
+        if osp.exists(osp.join(model_dir, p)) and p.endswith('.pt')
+    ]
 
     # choose weight file by priority, best.pt > xxx.pt
     for f in model_params_path:
@@ -138,10 +144,11 @@ class YmirYolov5(object):
 
         if self.half:
             # Run inference, warm up
-            self.model(torch.zeros(1, 3, imgsz, imgsz).to(
-                device).type_as(next(self.model.parameters())))
+            self.model(
+                torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(
+                    next(self.model.parameters())))
 
-    def init_detector(self, device: torch.device) -> Ensemble:
+    def init_detector(self, device: torch.device) -> Any:
         weights = get_weight_file(self.cfg)
 
         if not weights:
@@ -173,15 +180,19 @@ class YmirYolov5(object):
         agnostic_nms = False
         max_det = 1000
 
-        pred = non_max_suppression(
-            pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
+        pred = non_max_suppression(pred,
+                                   conf_thres,
+                                   iou_thres,
+                                   classes,
+                                   agnostic_nms,
+                                   max_det=max_det)
 
         result = []
         for det in pred:
             if len(det):
                 # Rescale boxes from img_size to img size
-                det[:, :4] = scale_coords(
-                    img1.shape[2:], det[:, :4], img.shape).round()
+                det[:, :4] = scale_coords(img1.shape[2:], det[:, :4],
+                                          img.shape).round()
                 result.append(det)
 
         # xyxy, conf, cls
@@ -199,8 +210,12 @@ class YmirYolov5(object):
 
         for i in range(result.shape[0]):
             xmin, ymin, xmax, ymax, conf, cls = result[i, :6].tolist()
-            ann = rw.Annotation(class_name=self.class_names[int(cls)], score=conf, box=rw.Box(
-                x=int(xmin), y=int(ymin), w=int(xmax - xmin), h=int(ymax - ymin)))
+            ann = rw.Annotation(class_name=self.class_names[int(cls)],
+                                score=conf,
+                                box=rw.Box(x=int(xmin),
+                                           y=int(ymin),
+                                           w=int(xmax - xmin),
+                                           h=int(ymax - ymin)))
 
             anns.append(ann)
 
@@ -216,7 +231,8 @@ def convert_ymir_to_yolov5(cfg: edict) -> None:
     data = dict(path=cfg.ymir.output.root_dir,
                 nc=len(cfg.param.class_names),
                 names=cfg.param.class_names)
-    for split, prefix in zip(['train', 'val', 'test'], ['training', 'val', 'candidate']):
+    for split, prefix in zip(['train', 'val', 'test'],
+                             ['training', 'val', 'candidate']):
         src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
         if osp.exists(src_file):
             shutil.copy(src_file, f'{cfg.ymir.output.root_dir}/{split}.tsv')
@@ -238,9 +254,7 @@ def write_ymir_training_result(cfg: edict,
         _write_ancient_ymir_training_result(cfg, map50)
 
 
-def _write_latest_ymir_training_result(cfg: edict,
-                                       map50: float,
-                                       epoch: int,
+def _write_latest_ymir_training_result(cfg: edict, map50: float, epoch: int,
                                        weight_file: str) -> None:
     """
     for ymir>=1.2.0
@@ -261,8 +275,11 @@ def _write_latest_ymir_training_result(cfg: edict,
                              mAP=float(map50))
     else:
         # save other files with
-        files = [osp.basename(f) for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))
-                 if not f.endswith('.pt')] + ['last.pt', 'best.pt']
+        files = [
+            osp.basename(f)
+            for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))
+            if not f.endswith('.pt')
+        ] + ['last.pt', 'best.pt']
 
         training_result_file = cfg.ymir.output.training_result_file
         if osp.exists(training_result_file):
@@ -280,8 +297,10 @@ def _write_ancient_ymir_training_result(cfg: edict, map50: float) -> None:
     for 1.0.0 <= ymir <=1.1.0
     """
     model = osp.splitext(osp.basename(cfg.param.cfg_file))[0]
-    files = [osp.basename(f) for f in glob.glob(
-        osp.join(cfg.ymir.output.models_dir, '*'))]
+    files = [
+        osp.basename(f)
+        for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))
+    ]
     training_result_file = cfg.ymir.output.training_result_file
     if osp.exists(training_result_file):
         with open(cfg.ymir.output.training_result_file, 'r') as f:

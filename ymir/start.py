@@ -66,8 +66,8 @@ def _get_bool(cfg: edict, key: str, default_value: bool = True) -> bool:
         return bool(v)
     elif isinstance(v, bool):
         return v
-    else:
-        raise Exception(f'unknown bool type {key} = {v} ({type(v)})')
+
+    raise Exception(f'unknown bool type {key} = {v} ({type(v)})')
 
 
 def _run_training(cfg: edict) -> None:
@@ -121,22 +121,22 @@ def _run_training(cfg: edict) -> None:
         commands += f'-m torch.distributed.launch --nproc_per_node {gpu_count} --master_port {port}'.split(
         )
 
-    if osp.basename(cfg_file) in ['yolov7.yaml', 'yolov7-tiny.yaml', 'yolov7x.yaml']:
+    if osp.basename(cfg_file) in [
+            'yolov7.yaml', 'yolov7-tiny.yaml', 'yolov7x.yaml'
+    ]:
         commands += ['train.py']
     else:
         commands += ['train_aux.py']
 
-    commands += ['--epochs', str(epochs),
-                 '--batch-size', str(batch_size),
-                 '--data', f'{out_dir}/data.yaml',
-                 '--workers', str(workers),
-                 '--project', project,
-                 '--name', name,
-                 '--cfg', cfg_file,
-                 '--hyp', hyp_file,
-                 '--weights', weights,
-                 '--img-size', str(img_size), str(img_size),
-                 '--device', device]
+    commands += [
+        '--epochs',
+        str(epochs), '--batch-size',
+        str(batch_size), '--data', f'{out_dir}/data.yaml', '--workers',
+        str(workers), '--project', project, '--name', name, '--cfg', cfg_file,
+        '--hyp', hyp_file, '--weights', weights, '--img-size',
+        str(img_size),
+        str(img_size), '--device', device
+    ]
 
     if gpu_count > 1 and sync_bn:
         commands.append("--sync-bn")
@@ -144,7 +144,7 @@ def _run_training(cfg: edict) -> None:
     if save_weight_file_num <= 1:
         commands.append("--nosave")
     else:
-        save_period = max(1, epochs//save_weight_file_num)
+        save_period = max(1, epochs // save_weight_file_num)
         commands += ['--save_period', str(save_period)]
 
     if cache_images:
@@ -168,19 +168,28 @@ def _run_training(cfg: edict) -> None:
 
 def _run_mining(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
     del cfg
-    monitor.write_monitor_logger(percent=get_ymir_process(
-        stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+    monitor.write_monitor_logger(
+        percent=get_ymir_process(stage=YmirStage.PREPROCESS,
+                                 p=1.0,
+                                 task_idx=task_idx,
+                                 task_num=task_num))
 
     command = 'python3 ymir/mining_cald.py'
     logging.info(f'mining: {command}')
     subprocess.run(command.split(), check=True)
-    monitor.write_monitor_logger(percent=get_ymir_process(
-        stage=YmirStage.POSTPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+    monitor.write_monitor_logger(
+        percent=get_ymir_process(stage=YmirStage.POSTPROCESS,
+                                 p=1.0,
+                                 task_idx=task_idx,
+                                 task_num=task_num))
 
 
 def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
-    monitor.write_monitor_logger(percent=get_ymir_process(
-        stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+    monitor.write_monitor_logger(
+        percent=get_ymir_process(stage=YmirStage.PREPROCESS,
+                                 p=1.0,
+                                 task_idx=task_idx,
+                                 task_num=task_num))
 
     N = dr.items_count(env.DatasetType.CANDIDATE)
     infer_result = {}
@@ -195,13 +204,18 @@ def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
         idx += 1
 
         if idx % monitor_gap == 0:
-            percent = get_ymir_process(
-                stage=YmirStage.TASK, p=idx / N, task_idx=task_idx, task_num=task_num)
+            percent = get_ymir_process(stage=YmirStage.TASK,
+                                       p=idx / N,
+                                       task_idx=task_idx,
+                                       task_num=task_num)
             monitor.write_monitor_logger(percent=percent)
 
     rw.write_infer_result(infer_result=infer_result)
-    monitor.write_monitor_logger(percent=get_ymir_process(
-        stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+    monitor.write_monitor_logger(
+        percent=get_ymir_process(stage=YmirStage.PREPROCESS,
+                                 p=1.0,
+                                 task_idx=task_idx,
+                                 task_num=task_num))
 
 
 if __name__ == '__main__':
