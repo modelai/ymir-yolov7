@@ -1,6 +1,7 @@
 """
-utils function for ymir and yolov5
+utils for ymir and yolov5
 """
+
 import glob
 import os
 import os.path as osp
@@ -16,6 +17,7 @@ from nptyping import NDArray, Shape, UInt8
 from packaging.version import Version
 from ymir_exc import env
 from ymir_exc import result_writer as rw
+from ymir_exc.util import get_weight_files
 
 from models.experimental import attempt_load
 from utils.datasets import letterbox
@@ -33,75 +35,21 @@ BBOX = NDArray[Shape['*,4'], Any]
 CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
 
 
-def get_ymir_process(stage: YmirStage,
-                     p: float,
-                     task_idx: int = 0,
-                     task_num: int = 1) -> float:
-    """
-    stage: pre-process/task/post-process
-    p: percent for stage
-    task_idx: index for multiple tasks like mining (task_idx=0) and infer (task_idx=1)
-    task_num: the total number of multiple tasks.
-    """
-    # const value for ymir process
-    PREPROCESS_PERCENT = 0.1
-    TASK_PERCENT = 0.8
-    POSTPROCESS_PERCENT = 0.1
-
-    if p < 0 or p > 1.0:
-        raise Exception(f'p not in [0,1], p={p}')
-
-    ratio = 1.0 / task_num
-    init = task_idx / task_num
-
-    if stage == YmirStage.PREPROCESS:
-        return init + PREPROCESS_PERCENT * p * ratio
-    elif stage == YmirStage.TASK:
-        return init + (PREPROCESS_PERCENT + TASK_PERCENT * p) * ratio
-    elif stage == YmirStage.POSTPROCESS:
-        return init + (PREPROCESS_PERCENT + TASK_PERCENT +
-                       POSTPROCESS_PERCENT * p) * ratio
-    else:
-        raise NotImplementedError(f'unknown stage {stage}')
-
-
-def get_merged_config() -> edict:
-    """
-    merge config from /in/env.yaml and /in/config.yaml
-    """
-    merged_cfg = edict()
-    # the hyperparameter information, from /in/config.yaml
-    merged_cfg.param = env.get_executor_config()
-
-    # the ymir path information, from /in/env.yaml
-    merged_cfg.ymir = env.get_current_env()
-    return merged_cfg
-
-
 def get_weight_file(cfg: edict) -> str:
     """
     cfg: from get_merged_config()
     find weight file in cfg.param.model_params_path or cfg.param.model_params_path
     return the weight file path by priority
     """
-    if cfg.ymir.run_training:
-        model_params_path = cfg.param.get('pretrained_model_params', [])
-    else:
-        model_params_path = cfg.param.model_params_path
-
-    model_dir = cfg.ymir.input.models_dir
-    model_params_path = [
-        p for p in model_params_path
-        if osp.exists(osp.join(model_dir, p)) and p.endswith('.pt')
-    ]
+    weight_files = get_weight_files(cfg, suffix=('.pt'))
 
     # choose weight file by priority, best.pt > xxx.pt
-    for f in model_params_path:
+    for f in weight_files:
         if f.endswith('best.pt'):
-            return osp.join(model_dir, f)
+            return f
 
-    if len(model_params_path) > 0:
-        return osp.join(model_dir, max(model_params_path, key=osp.getctime))
+    if len(weight_files) > 0:
+        return max(weight_files, key=osp.getctime)
 
     return ""
 
@@ -231,8 +179,8 @@ def convert_ymir_to_yolov5(cfg: edict) -> None:
     data = dict(path=cfg.ymir.output.root_dir,
                 nc=len(cfg.param.class_names),
                 names=cfg.param.class_names)
-    for split, prefix in zip(['train', 'val', 'test'],
-                             ['training', 'val', 'candidate']):
+    for split, prefix in zip(['train', 'val'],
+                             ['training', 'val']):
         src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
         if osp.exists(src_file):
             shutil.copy(src_file, f'{cfg.ymir.output.root_dir}/{split}.tsv')
@@ -241,80 +189,3 @@ def convert_ymir_to_yolov5(cfg: edict) -> None:
 
     with open(osp.join(cfg.ymir.output.root_dir, 'data.yaml'), 'w') as fw:
         fw.write(yaml.safe_dump(data))
-
-
-def write_ymir_training_result(cfg: edict,
-                               map50: float = 0.0,
-                               epoch: int = 0,
-                               weight_file: str = "") -> None:
-    YMIR_VERSION = os.getenv('YMIR_VERSION', '1.1.0')
-    if Version(YMIR_VERSION) >= Version('1.2.0'):
-        _write_latest_ymir_training_result(cfg, map50, epoch, weight_file)
-    else:
-        _write_ancient_ymir_training_result(cfg, map50)
-
-
-def _write_latest_ymir_training_result(cfg: edict, map50: float, epoch: int,
-                                       weight_file: str) -> None:
-    """
-    for ymir>=1.2.0
-    cfg: ymir config
-    map50: map50
-    epoch: stage
-    weight_file: saved weight files, empty weight_file will save all files
-
-    1. save weight file for each epoch.
-    2. save weight file for last.pt, best.pt and other config file
-    3. save weight file for best.onnx, no valid map50, attach to stage f"{model}_last_and_best"
-    """
-    model = osp.splitext(osp.basename(cfg.param.cfg_file))[0]
-    # use `rw.write_training_result` to save training result
-    if weight_file:
-        rw.write_model_stage(stage_name=f"{model}_{epoch}",
-                             files=[osp.basename(weight_file)],
-                             mAP=float(map50))
-    else:
-        # save other files with
-        files = [
-            osp.basename(f)
-            for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))
-            if not f.endswith('.pt')
-        ] + ['last.pt', 'best.pt']
-
-        training_result_file = cfg.ymir.output.training_result_file
-        if osp.exists(training_result_file):
-            with open(cfg.ymir.output.training_result_file, 'r') as f:
-                training_result = yaml.safe_load(stream=f)
-
-            map50 = max(training_result.get('map', 0.0), map50)
-        rw.write_model_stage(stage_name=f"{model}_last_and_best",
-                             files=files,
-                             mAP=float(map50))
-
-
-def _write_ancient_ymir_training_result(cfg: edict, map50: float) -> None:
-    """
-    for 1.0.0 <= ymir <=1.1.0
-    """
-    model = osp.splitext(osp.basename(cfg.param.cfg_file))[0]
-    files = [
-        osp.basename(f)
-        for f in glob.glob(osp.join(cfg.ymir.output.models_dir, '*'))
-    ]
-    training_result_file = cfg.ymir.output.training_result_file
-    if osp.exists(training_result_file):
-        with open(cfg.ymir.output.training_result_file, 'r') as f:
-            training_result = yaml.safe_load(stream=f)
-
-        training_result['model'] = files
-        training_result['map'] = max(training_result.get('map', 0), map50)
-    else:
-        training_result = {
-            'model': files,
-            'map': map50,
-            'stage_name': f'{model}'
-        }
-
-    env_config = env.get_current_env()
-    with open(env_config.output.training_result_file, 'w') as f:
-        yaml.safe_dump(training_result, f)

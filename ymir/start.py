@@ -15,14 +15,13 @@ from typing import List
 
 import cv2
 from easydict import EasyDict as edict
-from ymir_exc import dataset_reader as dr
-from ymir_exc import env, monitor
-from ymir_exc import result_writer as rw
+from ymir_exc import dataset_reader, env, monitor, result_writer
+from ymir_exc.util import (YmirStage, get_bool, get_merged_config,
+                           get_ymir_process, write_ymir_training_result)
 
 from models.experimental import attempt_download
-from ymir.ymir_yolov5 import (YmirStage, YmirYolov5, convert_ymir_to_yolov5,
-                              get_merged_config, get_weight_file,
-                              get_ymir_process, write_ymir_training_result)
+from ymir.ymir_yolov5 import (YmirYolov5, convert_ymir_to_yolov5,
+                              get_weight_file)
 
 
 def start() -> int:
@@ -52,24 +51,6 @@ def start() -> int:
     return 0
 
 
-def _get_bool(cfg: edict, key: str, default_value: bool = True) -> bool:
-    v = cfg.param.get(key, default_value)
-
-    if isinstance(v, str):
-        if v.lower() in ['f', 'false', '1']:
-            v = False
-        elif v.lower() in ['t', 'true', '0']:
-            v = True
-        else:
-            raise Exception(f'unknown bool str {key} = {v}')
-    elif isinstance(v, int):
-        return bool(v)
-    elif isinstance(v, bool):
-        return v
-
-    raise Exception(f'unknown bool type {key} = {v} ({type(v)})')
-
-
 def _run_training(cfg: edict) -> None:
     """
     function for training task
@@ -93,12 +74,12 @@ def _run_training(cfg: edict) -> None:
     gpu_id: str = str(cfg.param.gpu_id)
     gpu_count: int = len(gpu_id.split(',')) if gpu_id else 0
     port: int = int(cfg.param.get('port', 29500))
-    sync_bn: bool = _get_bool(cfg, 'sync_bn', False)
+    sync_bn: bool = get_bool(cfg, 'sync_bn', False)
     workers: int = int(cfg.param.get('workers', 8))
     cfg_file: str = cfg.param.get('cfg_file', 'cfg/training/yolov7-tiny.yaml')
     hyp_file: str = cfg.param.get('hyp_file', 'data/hyp.scratch.tiny.yaml')
-    cache_images: bool = _get_bool(cfg, 'cache_images', True)
-    exist_ok: bool = _get_bool(cfg, 'exist_ok', True)
+    cache_images: bool = get_bool(cfg, 'cache_images', True)
+    exist_ok: bool = get_bool(cfg, 'exist_ok', True)
 
     weights: str = get_weight_file(cfg)
     if not weights:
@@ -114,21 +95,21 @@ def _run_training(cfg: edict) -> None:
     commands: List[str] = ['python3']
     if gpu_count == 0:
         device = 'cpu'
-    elif gpu_count == 1:
-        device = gpu_id
     else:
         device = gpu_id
-        commands += f'-m torch.distributed.launch --nproc_per_node {gpu_count} --master_port {port}'.split(
-        )
+        if gpu_count > 1:
+            commands.extend(
+                f'-m torch.distributed.launch --nproc_per_node {gpu_count} --master_port {port}'
+                .split())
 
     if osp.basename(cfg_file) in [
             'yolov7.yaml', 'yolov7-tiny.yaml', 'yolov7x.yaml'
     ]:
-        commands += ['train.py']
+        commands.append('train.py')
     else:
-        commands += ['train_aux.py']
+        commands.append('train_aux.py')
 
-    commands += [
+    commands.extend([
         '--epochs',
         str(epochs), '--batch-size',
         str(batch_size), '--data', f'{out_dir}/data.yaml', '--workers',
@@ -136,7 +117,7 @@ def _run_training(cfg: edict) -> None:
         '--hyp', hyp_file, '--weights', weights, '--img-size',
         str(img_size),
         str(img_size), '--device', device
-    ]
+    ])
 
     if gpu_count > 1 and sync_bn:
         commands.append("--sync-bn")
@@ -145,7 +126,7 @@ def _run_training(cfg: edict) -> None:
         commands.append("--nosave")
     else:
         save_period = max(1, epochs // save_weight_file_num)
-        commands += ['--save_period', str(save_period)]
+        commands.extend(['--save_period', str(save_period)])
 
     if cache_images:
         commands.append("--cache-images")
@@ -154,7 +135,7 @@ def _run_training(cfg: edict) -> None:
         commands.append("--exist-ok")
 
     if args_options:
-        commands += args_options.split()
+        commands.extend(args_options.split())
 
     logging.info(f'start training: {commands}')
 
@@ -191,13 +172,14 @@ def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
                                  task_idx=task_idx,
                                  task_num=task_num))
 
-    N = dr.items_count(env.DatasetType.CANDIDATE)
+    N = dataset_reader.items_count(env.DatasetType.CANDIDATE)
     infer_result = {}
     model = YmirYolov5(cfg)
     idx = -1
 
     monitor_gap = max(1, N // 100)
-    for asset_path, _ in dr.item_paths(dataset_type=env.DatasetType.CANDIDATE):
+    for asset_path, _ in dataset_reader.item_paths(
+            dataset_type=env.DatasetType.CANDIDATE):
         img = cv2.imread(asset_path)
         result = model.infer(img)
         infer_result[asset_path] = result
@@ -210,7 +192,7 @@ def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
                                        task_num=task_num)
             monitor.write_monitor_logger(percent=percent)
 
-    rw.write_infer_result(infer_result=infer_result)
+    result_writer.write_infer_result(infer_result=infer_result)
     monitor.write_monitor_logger(
         percent=get_ymir_process(stage=YmirStage.PREPROCESS,
                                  p=1.0,
