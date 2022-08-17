@@ -3,7 +3,6 @@ utils for ymir and yolov5
 """
 
 import glob
-import os
 import os.path as osp
 import shutil
 from enum import IntEnum
@@ -15,8 +14,7 @@ import yaml
 from easydict import EasyDict as edict
 from nptyping import NDArray, Shape, UInt8
 from packaging.version import Version
-from ymir_exc import env
-from ymir_exc import result_writer as rw
+from ymir_exc import env, result_writer
 from ymir_exc.util import get_weight_files
 
 from models.experimental import attempt_load
@@ -152,15 +150,15 @@ class YmirYolov5(object):
 
         return numpy_result
 
-    def infer(self, img: CV_IMAGE) -> List[rw.Annotation]:
+    def infer(self, img: CV_IMAGE) -> List[result_writer.Annotation]:
         anns = []
         result = self.predict(img)
 
         for i in range(result.shape[0]):
             xmin, ymin, xmax, ymax, conf, cls = result[i, :6].tolist()
-            ann = rw.Annotation(class_name=self.class_names[int(cls)],
+            ann = result_writer.Annotation(class_name=self.class_names[int(cls)],
                                 score=conf,
-                                box=rw.Box(x=int(xmin),
+                                box=result_writer.Box(x=int(xmin),
                                            y=int(ymin),
                                            w=int(xmax - xmin),
                                            h=int(ymax - ymin)))

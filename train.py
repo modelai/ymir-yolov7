@@ -22,7 +22,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from ymir_exc import monitor
-from ymir_exc import result_writer as rw
+from ymir_exc.util import (YmirStage, get_merged_config, get_ymir_process,
+                           write_ymir_training_result)
 
 from models.experimental import attempt_load
 from models.yolo import Model
@@ -40,8 +41,6 @@ from utils.plots import plot_evolution, plot_images, plot_labels, plot_results
 from utils.torch_utils import (ModelEMA, intersect_dicts, is_parallel,
                                select_device, torch_distributed_zero_first)
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
-from ymir.ymir_yolov5 import (YmirStage, get_merged_config, get_ymir_process,
-                              write_ymir_training_result)
 
 logger = logging.getLogger(__name__)
 
@@ -478,7 +477,7 @@ def train(hyp, opt, device, tb_writer=None):
                 if (epoch + 1) % opt.save_period == 0:
                     epoch_weight_file = wdir / 'epoch_{:03d}.pt'.format(epoch)
                     torch.save(ckpt, epoch_weight_file)
-                    write_ymir_training_result(ymir_cfg, map50=float(results[2]), epoch=epoch, weight_file=str(epoch_weight_file))
+                    write_ymir_training_result(ymir_cfg, map50=float(results[2]), id=str(epoch), files=[str(epoch_weight_file)])
                 elif epoch >= (epochs-5):
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
                 if wandb_logger.wandb:

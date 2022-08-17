@@ -141,8 +141,8 @@ def _run_training(cfg: edict) -> None:
 
     subprocess.run(commands, check=True)
 
-    # save other files in output directory
-    write_ymir_training_result(cfg)
+    # save other files in output directory, map50 will use the best one.
+    write_ymir_training_result(cfg, map50=0, files=[], id='last')
     # if task done, write 100% percent log
     monitor.write_monitor_logger(percent=1.0)
 
