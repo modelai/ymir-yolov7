@@ -92,13 +92,13 @@ if rank in [-1, 0] and epoch % monitor_gap == 0:
 if (epoch + 1) % opt.save_period == 0:
     epoch_weight_file = wdir / 'epoch_{:03d}.pt'.format(epoch)
     torch.save(ckpt, epoch_weight_file)
-    write_ymir_training_result(ymir_cfg, map50=float(results[2]), epoch=epoch, weight_file=str(epoch_weight_file))
+    write_ymir_training_result(ymir_cfg, map50=float(results[2]), id=str(epoch), files=[str(epoch_weight_file)])
 ```
 
 - modify `start.py` save other output files
 ```
 # save other files in output directory
-write_ymir_training_result(cfg)
+write_ymir_training_result(cfg, map50=0, id='last', files=[])
 # if task done, write 100% percent log
 monitor.write_monitor_logger(percent=1.0)
 ```

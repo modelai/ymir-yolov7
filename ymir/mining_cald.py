@@ -6,8 +6,8 @@ import sys
 from typing import Dict, List, Tuple
 
 import cv2
-from easydict import EasyDict as edict
 import numpy as np
+from easydict import EasyDict as edict
 from nptyping import NDArray
 from scipy.stats import entropy
 from tqdm import tqdm
@@ -15,8 +15,10 @@ from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
 
-from ymir.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from ymir.ymir_yolov5 import BBOX, CV_IMAGE, YmirYolov5, YmirStage, get_ymir_process, get_merged_config
+from ymir.data_augment import (cutout, horizontal_flip, intersect, resize,
+                               rotate)
+from ymir.ymir_yolov5 import (BBOX, CV_IMAGE, YmirStage, YmirYolov5,
+                              get_merged_config, get_ymir_process)
 
 
 def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
@@ -33,6 +35,7 @@ def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
 
 
 class MiningCald(YmirYolov5):
+
     def __init__(self, cfg: edict):
         super().__init__(cfg)
 
@@ -53,7 +56,8 @@ class MiningCald(YmirYolov5):
         idx = -1
         beta = 1.3
         mining_result = []
-        for asset_path, _ in tqdm(dr.item_paths(dataset_type=env.DatasetType.CANDIDATE)):
+        for asset_path, _ in tqdm(
+                dr.item_paths(dataset_type=env.DatasetType.CANDIDATE)):
             img = cv2.imread(asset_path)
             # xyxy,conf,cls
             result = self.predict(img)
@@ -88,9 +92,12 @@ class MiningCald(YmirYolov5):
                     js = 0.5 * entropy(p, m) + 0.5 * entropy(q, m)
                     js = max(js, 0)
                     consistency_box = max_iou
-                    consistency_cls = 0.5 * (conf[origin_idx] + conf_key[aug_idx]) * (1 - js)
-                    consistency_per_inst = abs(consistency_box + consistency_cls - beta)
-                    consistency_per_aug = min(consistency_per_aug, consistency_per_inst.item())
+                    consistency_cls = 0.5 * (conf[origin_idx] +
+                                             conf_key[aug_idx]) * (1 - js)
+                    consistency_per_inst = abs(consistency_box +
+                                               consistency_cls - beta)
+                    consistency_per_aug = min(consistency_per_aug,
+                                              consistency_per_inst.item())
 
                     consistency += consistency_per_aug
 
@@ -100,13 +107,17 @@ class MiningCald(YmirYolov5):
             idx += 1
 
             if idx % monitor_gap == 0:
-                percent = get_ymir_process(stage=YmirStage.TASK, p=idx / N,
-                                           task_idx=self.task_idx, task_num=self.task_num)
+                percent = get_ymir_process(stage=YmirStage.TASK,
+                                           p=idx / N,
+                                           task_idx=self.task_idx,
+                                           task_num=self.task_num)
                 monitor.write_monitor_logger(percent=percent)
 
         return mining_result
 
-    def aug_predict(self, image: CV_IMAGE, bboxes: BBOX) -> Tuple[Dict[str, BBOX], Dict[str, NDArray]]:
+    def aug_predict(
+            self, image: CV_IMAGE,
+            bboxes: BBOX) -> Tuple[Dict[str, BBOX], Dict[str, NDArray]]:
         """
         for different augmentation methods: flip, cutout, rotate and resize
             augment the image and bbox and use model to predict them.
