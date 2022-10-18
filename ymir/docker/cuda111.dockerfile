@@ -17,11 +17,11 @@ RUN apt update && \
 
 # install ymir-exc
 RUN if [ "${YMIR}" = "1.1.0" ]; then \
-        pip install "git+https://github.com/yzbx/ymir-executor-sdk.git@ymir1.0.0"; \
+        pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.0.0"; \
     elif [ "${YMIR}" = "1.0.0" ]; then \
-        pip install "git+https://github.com/yzbx/ymir-executor-sdk.git@ymir1.0.0"; \
+        pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.0.0"; \
     else \
-        pip install "git+https://github.com/yzbx/ymir-executor-sdk.git"; \
+        pip install "git+https://github.com/modelai/ymir-executor-sdk.git"; \
     fi
 
 COPY . /yolov7
@@ -30,6 +30,12 @@ RUN pip install -r /yolov7/requirements.txt && \
     mkdir -p /img-man && \
     mv /yolov7/ymir/img-man/*.yaml /img-man && \
     echo "cd /yolov7 && python3 ymir/start.py" > /usr/bin/start.sh
+
+WORKDIR /yolov7
+RUN wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-tiny.pt && \
+    wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt && \
+    wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x.pt
+
 
 # overwrite entrypoint to avoid ymir1.1.0 import docker image error.
 ENTRYPOINT []

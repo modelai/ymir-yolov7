@@ -11,14 +11,11 @@ from easydict import EasyDict as edict
 from nptyping import NDArray
 from scipy.stats import entropy
 from tqdm import tqdm
+from ymir.data_augment import cutout, horizontal_flip, intersect, resize, rotate
+from ymir.ymir_yolov5 import BBOX, CV_IMAGE, YmirStage, YmirYolov5, get_merged_config, get_ymir_process
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
-
-from ymir.data_augment import (cutout, horizontal_flip, intersect, resize,
-                               rotate)
-from ymir.ymir_yolov5 import (BBOX, CV_IMAGE, YmirStage, YmirYolov5,
-                              get_merged_config, get_ymir_process)
 
 
 def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
@@ -89,7 +86,7 @@ class MiningCald(YmirYolov5):
                     p = cls_scores_aug[aug_idx]
                     q = cls_scores[origin_idx]
                     m = (p + q) / 2.
-                    js = 0.5 * entropy(p, m) + 0.5 * entropy(q, m)
+                    js = 0.5 * entropy([p, 1 - p], [m, 1 - m]) + 0.5 * entropy([q, 1 - q], [m, 1 - m])
                     js = max(js, 0)
                     consistency_box = max_iou
                     consistency_cls = 0.5 * (conf[origin_idx] +
