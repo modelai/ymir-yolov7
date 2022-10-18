@@ -9,14 +9,14 @@
 
 shm_size: '32G'
 export_format: 'ark:raw'
-batch_size: 16 # --batch-size
+batch_size_per_gpu: 16 # --batch-size
 epochs: 300 # --epochs
 img_size: 640 # --img-size
 args_options: '--exist-ok'
 save_weight_file_num: 5  # --save_period
 sync_bn: False # work for multi-gpu only
 port: 29500 # work for multi-gpu only
-workers: 8 # number of workers for data loader, --workers
+workers_per_gpu: 8 # number of workers for data loader, --workers
 cfg_file: 'cfg/training/yolov7-tiny.yaml' # --cfg
 hyp_file: 'data/hyp.scratch.tiny.yaml' # --hyp
 cache_images: True # --cache-images
