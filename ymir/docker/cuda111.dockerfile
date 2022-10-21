@@ -16,13 +16,7 @@ RUN apt update && \
     apt install -y zip htop vim libgl1-mesa-glx
 
 # install ymir-exc
-RUN if [ "${YMIR}" = "1.1.0" ]; then \
-        pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.0.0"; \
-    elif [ "${YMIR}" = "1.0.0" ]; then \
-        pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.0.0"; \
-    else \
-        pip install "git+https://github.com/modelai/ymir-executor-sdk.git"; \
-    fi
+RUN pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.3.0"
 
 COPY . /yolov7
 # pip install required packages

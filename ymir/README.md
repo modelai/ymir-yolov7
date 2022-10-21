@@ -106,3 +106,7 @@ monitor.write_monitor_logger(percent=1.0)
 ## infer and mining
 - view `ymir/start.py` "_run_infer()" for infer
 - view `ymir/start.py` "_run_mining()" for mining
+
+## TODO
+- [ ] multi-gpu mining and infer
+- [ ] batch mining and infer
