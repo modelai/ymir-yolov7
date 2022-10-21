@@ -17,7 +17,8 @@ import cv2
 from easydict import EasyDict as edict
 from models.experimental import attempt_download
 from ymir_exc import dataset_reader, env, monitor, result_writer
-from ymir_exc.util import (YmirStage, get_bool, get_merged_config, get_ymir_process, write_ymir_training_result)
+from ymir_exc.util import (YmirStage, get_bool, get_merged_config, get_ymir_process, write_ymir_training_result,
+                           find_free_port)
 
 from ymir.ymir_yolov5 import (YmirYolov5, convert_ymir_to_yolov5, get_weight_file)
 
@@ -68,9 +69,9 @@ def _run_training(cfg: edict) -> None:
     img_size: int = int(cfg.param.img_size)
     save_weight_file_num: int = int(cfg.param.get('save_weight_file_num', 1))
     args_options: str = cfg.param.get('args_options', '')
-    port: int = int(cfg.param.get('port', 29500))
+    port: int = find_free_port()
     sync_bn: bool = get_bool(cfg, 'sync_bn', False)
-    workers_per_gpu: int = int(cfg.param.get('workers_per_gpu', 8))
+    workers_per_gpu: int = int(cfg.param.get('workers_per_gpu', 4))
     cfg_file: str = cfg.param.get('cfg_file', 'cfg/training/yolov7-tiny.yaml')
     hyp_file: str = cfg.param.get('hyp_file', 'data/hyp.scratch.tiny.yaml')
     cache_images: bool = get_bool(cfg, 'cache_images', True)
