@@ -4,8 +4,6 @@ ARG CUDNN="8"
 
 # cuda11.1 + pytorch 1.9.0 + cudnn8 not work!!!
 FROM pytorch/pytorch:${PYTORCH}-cuda${CUDA}-cudnn${CUDNN}-runtime
-# support YMIR=1.0.0, 1.1.0 or 1.2.0
-ARG YMIR="1.1.0"
 ENV PYTHONPATH=.
 ENV YMIR_VERSION=$YMIR
 
@@ -34,7 +32,7 @@ RUN cd /app && mkdir -p /img-man && mv /app/ymir/img-man/*-template.yaml /img-ma
     && mkdir -p /root/.config/Ultralytics \
     && wget https://ultralytics.com/assets/Arial.ttf -O /root/.config/Ultralytics/Arial.ttf \
     && pip install -r /app/requirements.txt \
-    && pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.3.0" \
+    && pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir2.1.0" \
     && wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-tiny.pt \
     && wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt \
     && wget https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x.pt \

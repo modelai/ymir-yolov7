@@ -1,112 +1,79 @@
-# ymir-yolov5
+# ymir-yolov7 镜像说明文档
+
+## 代码仓库
+
+> 参考[WongKinYiu/yolov7](https://github.com/WongKinYiu/yolov7)
+- [modelai/ymir-yolov7](https://github.com/modelai/ymir-yolov7)
+
+## 镜像地址
 
 ```
-docker pull youdaoyzbx/ymir-executor:ymir1.1.0-yolov7-cu111-tmi
+youdaoyzbx/ymir-executor:ymir2.1.0-yolov7-cu111-tmi
 
-docker build -t ymir/executor:yolov7-cu111-tmi --build-arg YMIR=1.1.0 -f ymir/docker/cuda111.dockerfile .
+# 此版本加载预训练权重需要epoch>原有epoch，否则会出错. 
+youdaoyzbx/ymir-executor:ymir2.0.0-yolov7-cu111-tmi
 ```
 
+## 性能表现
 
-## change log
-- add `ymir` folder
-- modify `train.py` to write `monitor.txt` and `result.yaml`
-- modify `utils/datasets.py` to support ymir dataset format
+> 数据参考[WongKinYiu/yolov7](https://github.com/WongKinYiu/yolov7)
+
+| Model | Test Size | AP<sup>test</sup> | AP<sub>50</sub><sup>test</sup> | AP<sub>75</sub><sup>test</sup> | batch 1 fps | batch 32 average time |
+| :-- | :-: | :-: | :-: | :-: | :-: | :-: |
+| [**YOLOv7**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7.pt) | 640 | **51.4%** | **69.7%** | **55.9%** | 161 *fps* | 2.8 *ms* |
+| [**YOLOv7-X**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7x.pt) | 640 | **53.1%** | **71.2%** | **57.8%** | 114 *fps* | 4.3 *ms* |
+|  |  |  |  |  |  |  |
+| [**YOLOv7-W6**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-w6.pt) | 1280 | **54.9%** | **72.6%** | **60.1%** | 84 *fps* | 7.6 *ms* |
+| [**YOLOv7-E6**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6.pt) | 1280 | **56.0%** | **73.5%** | **61.2%** | 56 *fps* | 12.3 *ms* |
+| [**YOLOv7-D6**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-d6.pt) | 1280 | **56.6%** | **74.0%** | **61.8%** | 44 *fps* | 15.0 *ms* |
+| [**YOLOv7-E6E**](https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6e.pt) | 1280 | **56.8%** | **74.4%** | **62.1%** | 36 *fps* | 18.7 *ms* |
 
 
-## support ymir dataset format
-- use `convert_ymir_to_yolov5` to generate `data.yaml`
+## 训练参数
 
-- modify `utils/datasets.py` load `train.tsv`, `val.tsv`
+| 超参数 | 默认值 | 类型 | 说明 | 建议 |
+| - | - | - | - | - |
+| hyper-parameter | default value | type | note | advice |
+| shm_size | 128G | 字符串| 受ymir后台处理，docker image 可用共享内存 | 建议大小：镜像占用GPU数 * 32G |
+| export_format | ark:raw | 字符串| 受ymir后台处理，ymir数据集导出格式 | - |
+| model | yolov5s | 字符串 | yolov5模型，可选yolov5n, yolov5s, yolov5m, yolov5l等 | 建议：速度快选yolov5n, 精度高选yolov5l, yolov5x, 平衡选yolov5s或yolov5m |
+| batch_size_per_gpu | 16 | 整数 | 每张GPU一次处理的图片数量 | 建议大小：显存占用<50% 可增加2倍加快训练速度 |
+| workers_per_gpu | 4 | 整数 | 每张GPU对应的数据读取进程数 | - |
+| epochs | 100 | 整数 | 整个数据集的训练遍历次数 | 建议：必要时分析tensorboard确定是否有必要改变，一般采用默认值即可 |
+| img_size | 640 | 整数 | 输入模型的图像分辨率 | - |
+| args_options | '--exist-ok' | 字符串 | yolov5命令行参数 | 建议：专业用户可用yolov5所有命令行参数 |
+| save_weight_file_num | 1 | 整数 | 保存最新模型的数量 | - |
+| sync_bn | False | 布尔型 | 是否同步各gpu上的归一化层 | 建议：开启以提高训练稳定性及精度 |
+| cfg_file | cfg/training/yolov7-tiny.yaml | 文件路径 | 模型文件路径, 对应 `--cfg` | 参考[cfg/training](https://github.com/modelai/ymir-yolov7/tree/ymir/cfg/training) |
+| hyp_file | data/hyp.scratch.tiny.yaml | 文件路径 | 超参数文件路径，对应 `--hyp` | 参考[data](https://github.com/modelai/ymir-yolov7/tree/ymir/data) |
+| cache_images | True | 布尔 | 是否缓存图像 | 设置为True可加快训练速度 |
+
+
+## 推理参数
+
+| 超参数 | 默认值 | 类型 | 说明 | 建议 |
+| - | - | - | - | - |
+| hyper-parameter | default value | type | note | advice |
+| img_size | 640 | 整数 | 模型的输入图像大小 | 采用32的整数倍，224 = 32*7 以上大小 |
+| conf_thres | 0.25 | 浮点数 | 置信度阈值 | 采用默认值 |
+| iou_thres | 0.45 | 浮点数 | nms时的iou阈值 | 采用默认值 |
+
+## 挖掘参数
+
+| 超参数 | 默认值 | 类型 | 说明 | 建议 |
+| - | - | - | - | - |
+| hyper-parameter | default value | type | note | advice |
+| shm_size | 128G | 字符串| 受ymir后台处理，docker image 可用共享内存 | 建议大小：镜像占用GPU数 * 32G |
+| img_size | 640 | 整数 | 模型的输入图像大小 | 采用32的整数倍，224 = 32*7 以上大小 |
+| conf_thres | 0.25 | 浮点数 | 置信度阈值 | 采用默认值 |
+| iou_thres | 0.45 | 浮点数 | nms时的iou阈值 | 采用默认值 |
+
+## 引用
 ```
-# support ymir index file `train.tsv` and `val.tsv`
-# class LoadImagesAndLabels(Dataset):
-f = []  # image files
-img2label_map = dict()  # map image files to label files
-for p in path if isinstance(path, list) else [path]:
-    p = Path(p)  # os-agnostic
-    if p.is_file():  # file
-        with open(p, 'r') as t:
-            t = t.read().strip().splitlines()
-            for x in t:
-                # x = f'{image_path}\t{label_path}\n'
-                image_path, label_path = x.split()
-                f.append(image_path)
-                img2label_map[image_path] = label_path
-    else:
-        raise Exception(f'{prefix}{p} is not valid ymir index file')
-
-# get label file path from image file path
-def img2label_paths(img_paths, img2label_map={}):
-    return [img2label_map[img] for img in img_paths]
-
-self.label_files = img2label_paths(self.img_files, img2label_map)
-
-# support ymir label file
-# convert ymir (xyxy) to yolov5 bbox format normalized (xc,yc,w,h)
-# def cache_labels()
-l_ymir = np.array(l, dtype=np.float32)
-l = l_ymir.copy()
-width, height = imagesize.get(im_file)
-l[:,1:5:2] /= width # normalize x1,x2
-l[:,2:5:2] /= height # normalize y1,y2
-l[:,1] = (l_ymir[:,1] + l_ymir[:,3])/2/width
-l[:,2] = (l_ymir[:,2] + l_ymir[:,4])/2/height
-l[:,3] = (l_ymir[:,3] - l_ymir[:,1])/width
-l[:,4] = (l_ymir[:,4] - l_ymir[:,2])/height
+@article{wang2022yolov7,
+  title={{YOLOv7}: Trainable bag-of-freebies sets new state-of-the-art for real-time object detectors},
+  author={Wang, Chien-Yao and Bochkovskiy, Alexey and Liao, Hong-Yuan Mark},
+  journal={arXiv preprint arXiv:2207.02696},
+  year={2022}
+}
 ```
-
-## write monitor and training results
-
-modify `train.py`
-- import functions
-```
-from ymir.ymir_yolov5 import get_merged_config, YmirStage, get_ymir_process
-from ymir_exc import monitor
-from ymir_exc import result_writer as rw
-```
-
-- write tensorboard results
-```
-# change tensorboard writer log_dir
-ymir_cfg = get_merged_config()
-tb_writer = SummaryWriter(ymir_cfg.ymir.output.tensorboard_dir)  # Tensorboard
-```
-
-- monitor training process
-```
-# for each epoch
-monitor_gap = max(1, (epochs - start_epoch)//1000)
-if rank in [-1, 0] and epoch % monitor_gap == 0:
-    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.TASK, p=(epoch-start_epoch)/(epochs-start_epoch)))
-```
-
-- write `result.yaml` to save model weights and map50
-    - optional: modify `utils/metrics.py` fitness() to save best map50
-    ```
-    def fitness(x):
-        # Model fitness as a weighted combination of metrics
-        w = [0.0, 0.0, 1.0, 0.0]  # weights for [P, R, mAP@0.5, mAP@0.5:0.95]
-        return (x[:, :4] * w).sum(1)
-    ```
-```
-if (epoch + 1) % opt.save_period == 0:
-    epoch_weight_file = wdir / 'epoch_{:03d}.pt'.format(epoch)
-    torch.save(ckpt, epoch_weight_file)
-    write_ymir_training_result(ymir_cfg, map50=float(results[2]), id=str(epoch), files=[str(epoch_weight_file)])
-```
-
-- modify `start.py` save other output files
-```
-# save other files in output directory
-write_ymir_training_result(cfg, map50=0, id='last', files=[])
-# if task done, write 100% percent log
-monitor.write_monitor_logger(percent=1.0)
-```
-
-## infer and mining
-- view `ymir/start.py` "_run_infer()" for infer
-- view `ymir/start.py` "_run_mining()" for mining
-
-## TODO
-- [ ] multi-gpu mining and infer
-- [ ] batch mining and infer

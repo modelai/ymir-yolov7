@@ -15,12 +15,13 @@ from typing import List
 
 import cv2
 from easydict import EasyDict as edict
-from ymir_exc import dataset_reader, env, monitor, result_writer
-from ymir_exc.util import (YmirStage, find_free_port, get_bool, get_merged_config, write_ymir_monitor_process,
-                           write_ymir_training_result)
-
 from models.experimental import attempt_download
-from ymir.ymir_yolov5 import YmirYolov5, convert_ymir_to_yolov5, get_weight_file
+from ymir_exc import dataset_reader, env, monitor, result_writer
+from ymir_exc.util import (YmirStage, find_free_port, get_bool,
+                           get_merged_config, write_ymir_monitor_process)
+
+from ymir.ymir_yolov5 import (YmirYolov5, convert_ymir_to_yolov5,
+                              get_weight_file)
 
 
 def start() -> int:
@@ -125,8 +126,6 @@ def _run_training(cfg: edict) -> None:
 
     subprocess.run(commands, check=True)
 
-    # save other files in output directory, map50 will use the best one.
-    write_ymir_training_result(cfg, map50=0, files=[], id='last')
     # if task done, write 100% percent log
     monitor.write_monitor_logger(percent=1.0)
 
