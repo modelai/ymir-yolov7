@@ -11,11 +11,13 @@ from easydict import EasyDict as edict
 from nptyping import NDArray
 from scipy.stats import entropy
 from tqdm import tqdm
-from ymir.data_augment import cutout, horizontal_flip, intersect, resize, rotate
-from ymir.ymir_yolov5 import BBOX, CV_IMAGE, YmirStage, YmirYolov5, get_merged_config, get_ymir_process
 from ymir_exc import dataset_reader as dr
 from ymir_exc import env, monitor
 from ymir_exc import result_writer as rw
+from ymir_exc.util import YmirStage, get_merged_config, write_ymir_monitor_process
+
+from ymir.data_augment import cutout, horizontal_flip, intersect, resize, rotate
+from ymir.ymir_yolov5 import BBOX, CV_IMAGE, YmirYolov5
 
 
 def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
@@ -32,20 +34,6 @@ def split_result(result: NDArray) -> Tuple[BBOX, NDArray, NDArray]:
 
 
 class MiningCald(YmirYolov5):
-
-    def __init__(self, cfg: edict):
-        super().__init__(cfg)
-
-        if cfg.ymir.run_mining and cfg.ymir.run_infer:
-            # multiple task, run mining first, infer later
-            mining_task_idx = 0
-            task_num = 2
-        else:
-            mining_task_idx = 0
-            task_num = 1
-
-        self.task_idx = mining_task_idx
-        self.task_num = task_num
 
     def mining(self) -> List:
         N = dr.items_count(env.DatasetType.CANDIDATE)
@@ -104,11 +92,7 @@ class MiningCald(YmirYolov5):
             idx += 1
 
             if idx % monitor_gap == 0:
-                percent = get_ymir_process(stage=YmirStage.TASK,
-                                           p=idx / N,
-                                           task_idx=self.task_idx,
-                                           task_num=self.task_num)
-                monitor.write_monitor_logger(percent=percent)
+                write_ymir_monitor_process(self.cfg, task='mining', naive_stage_percent=idx / N, stage=YmirStage.PREPROCESS)
 
         return mining_result
 

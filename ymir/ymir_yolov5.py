@@ -2,10 +2,8 @@
 utils for ymir and yolov5
 """
 
-import glob
 import os.path as osp
 import shutil
-from enum import IntEnum
 from typing import Any, List
 
 import numpy as np
@@ -13,21 +11,13 @@ import torch
 import yaml
 from easydict import EasyDict as edict
 from nptyping import NDArray, Shape, UInt8
-from packaging.version import Version
-from ymir_exc import env, result_writer
+from ymir_exc import result_writer
 from ymir_exc.util import get_weight_files
 
 from models.experimental import attempt_load
 from utils.datasets import letterbox
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.torch_utils import select_device
-
-
-class YmirStage(IntEnum):
-    PREPROCESS = 1  # convert dataset
-    TASK = 2  # training/mining/infer
-    POSTPROCESS = 3  # export model
-
 
 BBOX = NDArray[Shape['*,4'], Any]
 CV_IMAGE = NDArray[Shape['*,*,3'], UInt8]
@@ -59,17 +49,6 @@ class YmirYolov5(object):
 
     def __init__(self, cfg: edict):
         self.cfg = cfg
-        if cfg.ymir.run_mining and cfg.ymir.run_infer:
-            # multiple task, run mining first, infer later
-            infer_task_idx = 1
-            task_num = 2
-        else:
-            infer_task_idx = 0
-            task_num = 1
-
-        self.task_idx = infer_task_idx
-        self.task_num = task_num
-
         device = select_device(cfg.param.get('gpu_id', 'cpu'))
 
         self.model = self.init_detector(device)
@@ -90,9 +69,7 @@ class YmirYolov5(object):
 
         if self.half:
             # Run inference, warm up
-            self.model(
-                torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(
-                    next(self.model.parameters())))
+            self.model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(self.model.parameters())))
 
     def init_detector(self, device: torch.device) -> Any:
         weights = get_weight_file(self.cfg)
@@ -126,19 +103,13 @@ class YmirYolov5(object):
         agnostic_nms = False
         max_det = 1000
 
-        pred = non_max_suppression(pred,
-                                   conf_thres,
-                                   iou_thres,
-                                   classes,
-                                   agnostic_nms,
-                                   max_det=max_det)
+        pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
 
         result = []
         for det in pred:
             if len(det):
                 # Rescale boxes from img_size to img size
-                det[:, :4] = scale_coords(img1.shape[2:], det[:, :4],
-                                          img.shape).round()
+                det[:, :4] = scale_coords(img1.shape[2:], det[:, :4], img.shape).round()
                 result.append(det)
 
         # xyxy, conf, cls
@@ -157,11 +128,11 @@ class YmirYolov5(object):
         for i in range(result.shape[0]):
             xmin, ymin, xmax, ymax, conf, cls = result[i, :6].tolist()
             ann = result_writer.Annotation(class_name=self.class_names[int(cls)],
-                                score=conf,
-                                box=result_writer.Box(x=int(xmin),
-                                           y=int(ymin),
-                                           w=int(xmax - xmin),
-                                           h=int(ymax - ymin)))
+                                           score=conf,
+                                           box=result_writer.Box(x=int(xmin),
+                                                                 y=int(ymin),
+                                                                 w=int(xmax - xmin),
+                                                                 h=int(ymax - ymin)))
 
             anns.append(ann)
 
@@ -174,11 +145,8 @@ def convert_ymir_to_yolov5(cfg: edict) -> None:
     generate data.yaml for training/mining/infer
     """
 
-    data = dict(path=cfg.ymir.output.root_dir,
-                nc=len(cfg.param.class_names),
-                names=cfg.param.class_names)
-    for split, prefix in zip(['train', 'val'],
-                             ['training', 'val']):
+    data = dict(path=cfg.ymir.output.root_dir, nc=len(cfg.param.class_names), names=cfg.param.class_names)
+    for split, prefix in zip(['train', 'val'], ['training', 'val']):
         src_file = getattr(cfg.ymir.input, f'{prefix}_index_file')
         if osp.exists(src_file):
             shutil.copy(src_file, f'{cfg.ymir.output.root_dir}/{split}.tsv')

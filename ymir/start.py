@@ -16,9 +16,12 @@ from typing import List
 import cv2
 from easydict import EasyDict as edict
 from models.experimental import attempt_download
-from ymir.ymir_yolov5 import YmirYolov5, convert_ymir_to_yolov5, get_weight_file
 from ymir_exc import dataset_reader, env, monitor, result_writer
-from ymir_exc.util import YmirStage, get_bool, get_merged_config, get_ymir_process, write_ymir_training_result
+from ymir_exc.util import (YmirStage, find_free_port, get_bool,
+                           get_merged_config, write_ymir_monitor_process)
+
+from ymir.ymir_yolov5 import (YmirYolov5, convert_ymir_to_yolov5,
+                              get_weight_file)
 
 
 def start() -> int:
@@ -29,19 +32,11 @@ def start() -> int:
     if cfg.ymir.run_training:
         _run_training(cfg)
     else:
-        if cfg.ymir.run_mining and cfg.ymir.run_infer:
-            # multiple task, run mining first, infer later
-            infer_task_idx = 1
-            task_num = 2
-        else:
-            infer_task_idx = 0
-            task_num = 1
-
-        # task_idx and task_num will change the percent for monitor
+        # mining first, then infer if run two tasks
         if cfg.ymir.run_mining:
-            _run_mining(cfg, 0, task_num)
+            _run_mining(cfg)
         if cfg.ymir.run_infer:
-            _run_infer(cfg, infer_task_idx, task_num)
+            _run_infer(cfg)
 
     return 0
 
@@ -57,7 +52,7 @@ def _run_training(cfg: edict) -> None:
     out_dir: str = cfg.ymir.output.root_dir
     convert_ymir_to_yolov5(cfg)
     logging.info(f'generate {out_dir}/data.yaml')
-    monitor.write_monitor_logger(percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0))
+    write_ymir_monitor_process(cfg, task='training', naive_stage_percent=1.0, stage=YmirStage.PREPROCESS)
 
     # 2. training model
     epochs: int = int(cfg.param.epochs)
@@ -67,9 +62,9 @@ def _run_training(cfg: edict) -> None:
     img_size: int = int(cfg.param.img_size)
     save_weight_file_num: int = int(cfg.param.get('save_weight_file_num', 1))
     args_options: str = cfg.param.get('args_options', '')
-    port: int = int(cfg.param.get('port', 29500))
+    port: int = find_free_port()
     sync_bn: bool = get_bool(cfg, 'sync_bn', False)
-    workers_per_gpu: int = int(cfg.param.get('workers_per_gpu', 8))
+    workers_per_gpu: int = int(cfg.param.get('workers_per_gpu', 4))
     cfg_file: str = cfg.param.get('cfg_file', 'cfg/training/yolov7-tiny.yaml')
     hyp_file: str = cfg.param.get('hyp_file', 'data/hyp.scratch.tiny.yaml')
     cache_images: bool = get_bool(cfg, 'cache_images', True)
@@ -103,9 +98,8 @@ def _run_training(cfg: edict) -> None:
         '--epochs',
         str(epochs), '--batch-size',
         str(batch_size), '--data', f'{out_dir}/data.yaml', '--workers',
-        str(workers_per_gpu), '--project', project, '--name', name,
-        '--cfg', cfg_file, '--hyp', hyp_file, '--weights', weights,
-        '--img-size',
+        str(workers_per_gpu), '--project', project, '--name', name, '--cfg', cfg_file, '--hyp', hyp_file, '--weights',
+        weights, '--img-size',
         str(img_size),
         str(img_size), '--device', device
     ])
@@ -132,27 +126,21 @@ def _run_training(cfg: edict) -> None:
 
     subprocess.run(commands, check=True)
 
-    # save other files in output directory, map50 will use the best one.
-    write_ymir_training_result(cfg, map50=0, files=[], id='last')
     # if task done, write 100% percent log
     monitor.write_monitor_logger(percent=1.0)
 
 
-def _run_mining(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
-    del cfg
-    monitor.write_monitor_logger(
-        percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+def _run_mining(cfg: edict) -> None:
+    write_ymir_monitor_process(cfg, task='mining', naive_stage_percent=1.0, stage=YmirStage.PREPROCESS)
 
     command = 'python3 ymir/mining_cald.py'
     logging.info(f'mining: {command}')
     subprocess.run(command.split(), check=True)
-    monitor.write_monitor_logger(
-        percent=get_ymir_process(stage=YmirStage.POSTPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+    write_ymir_monitor_process(cfg, task='mining', naive_stage_percent=1.0, stage=YmirStage.POSTPROCESS)
 
 
-def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
-    monitor.write_monitor_logger(
-        percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+def _run_infer(cfg: edict) -> None:
+    write_ymir_monitor_process(cfg, task='infer', naive_stage_percent=1.0, stage=YmirStage.PREPROCESS)
 
     N = dataset_reader.items_count(env.DatasetType.CANDIDATE)
     infer_result = {}
@@ -167,12 +155,10 @@ def _run_infer(cfg: edict, task_idx: int = 0, task_num: int = 1) -> None:
         idx += 1
 
         if idx % monitor_gap == 0:
-            percent = get_ymir_process(stage=YmirStage.TASK, p=idx / N, task_idx=task_idx, task_num=task_num)
-            monitor.write_monitor_logger(percent=percent)
+            write_ymir_monitor_process(cfg, task='infer', naive_stage_percent=idx / N, stage=YmirStage.TASK)
 
     result_writer.write_infer_result(infer_result=infer_result)
-    monitor.write_monitor_logger(
-        percent=get_ymir_process(stage=YmirStage.PREPROCESS, p=1.0, task_idx=task_idx, task_num=task_num))
+    write_ymir_monitor_process(cfg, task='infer', naive_stage_percent=1.0, stage=YmirStage.POSTPROCESS)
 
 
 if __name__ == '__main__':

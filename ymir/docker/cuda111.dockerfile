@@ -2,7 +2,6 @@ ARG baseimage=20.12-py3
 # yolov7 recommended for 21.08-py3, here we use py3.8 + cuda11.1.1 + pytorch1.8.0
 # view https://docs.nvidia.com/deeplearning/frameworks/pytorch-release-notes/rel_20-12.html#rel_20-12 for details
 FROM nvcr.io/nvidia/pytorch:${baseimage}
-ARG YMIR="1.1.0"
 ENV PYTHONPATH=.
 ENV YMIR_VERSION=$YMIR
 
@@ -16,13 +15,7 @@ RUN apt update && \
     apt install -y zip htop vim libgl1-mesa-glx
 
 # install ymir-exc
-RUN if [ "${YMIR}" = "1.1.0" ]; then \
-        pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.0.0"; \
-    elif [ "${YMIR}" = "1.0.0" ]; then \
-        pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir1.0.0"; \
-    else \
-        pip install "git+https://github.com/modelai/ymir-executor-sdk.git"; \
-    fi
+RUN pip install "git+https://github.com/modelai/ymir-executor-sdk.git@ymir2.1.0"
 
 COPY . /yolov7
 # pip install required packages

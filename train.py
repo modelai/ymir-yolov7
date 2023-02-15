@@ -21,20 +21,25 @@ from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-from ymir_exc import monitor
-from ymir_exc.util import YmirStage, get_merged_config, get_ymir_process, write_ymir_training_result
+from ymir_exc.util import (YmirStage, get_merged_config,
+                           write_ymir_monitor_process,
+                           write_ymir_training_result)
 
 from models.experimental import attempt_load
 from models.yolo import Model
 from utils.autoanchor import check_anchors
 from utils.datasets import create_dataloader
-from utils.general import (check_dataset, check_file, check_git_status, check_img_size, check_requirements, colorstr,
-                           fitness, get_latest_run, increment_path, init_seeds, labels_to_class_weights,
-                           labels_to_image_weights, one_cycle, print_mutation, set_logging, strip_optimizer)
+from utils.general import (check_dataset, check_file, check_git_status,
+                           check_img_size, check_requirements, colorstr,
+                           fitness, get_latest_run, increment_path, init_seeds,
+                           labels_to_class_weights, labels_to_image_weights,
+                           one_cycle, print_mutation, set_logging,
+                           strip_optimizer)
 from utils.google_utils import attempt_download
 from utils.loss import ComputeLoss, ComputeLossOTA
 from utils.plots import plot_evolution, plot_images, plot_labels, plot_results
-from utils.torch_utils import ModelEMA, intersect_dicts, is_parallel, select_device, torch_distributed_zero_first
+from utils.torch_utils import (ModelEMA, intersect_dicts, is_parallel,
+                               select_device, torch_distributed_zero_first)
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
 
 logger = logging.getLogger(__name__)
@@ -208,7 +213,8 @@ def train(hyp, opt, device, tb_writer=None):
         # Optimizer
         if ckpt['optimizer'] is not None:
             optimizer.load_state_dict(ckpt['optimizer'])
-            best_fitness = ckpt['best_fitness']
+            if opt.resume:
+                best_fitness = ckpt['best_fitness']
 
         # EMA
         if ema and ckpt.get('ema'):
@@ -223,7 +229,10 @@ def train(hyp, opt, device, tb_writer=None):
         start_epoch = ckpt['epoch'] + 1
         if opt.resume:
             assert start_epoch > 0, '%s training to %g epochs is finished, nothing to resume.' % (weights, epochs)
-        if epochs < start_epoch:
+        else:
+            start_epoch = 0
+
+        if epochs <= start_epoch:
             logger.info('%s has been trained for %g epochs. Fine-tuning for %g additional epochs.' %
                         (weights, ckpt['epoch'], epochs))
             epochs += ckpt['epoch']  # finetune additional epochs
@@ -287,7 +296,7 @@ def train(hyp, opt, device, tb_writer=None):
             # cf = torch.bincount(c.long(), minlength=nc) + 1.  # frequency
             # model._initialize_biases(cf.to(device))
             if plots:
-                #plot_labels(labels, names, save_dir, loggers)
+                # plot_labels(labels, names, save_dir, loggers)
                 if tb_writer:
                     tb_writer.add_histogram('classes', c, 0)
 
@@ -337,8 +346,8 @@ def train(hyp, opt, device, tb_writer=None):
         model.train()
 
         if rank in [-1, 0] and epoch % monitor_gap == 0:
-            monitor.write_monitor_logger(
-                percent=get_ymir_process(stage=YmirStage.TASK, p=(epoch - start_epoch) / (epochs - start_epoch)))
+            p = (epoch - start_epoch) / (epochs - start_epoch)
+            write_ymir_monitor_process(ymir_cfg, task='training', naive_stage_percent=p, stage=YmirStage.TASK)
         # Update image weights (optional)
         if opt.image_weights:
             # Generate indices
@@ -507,16 +516,31 @@ def train(hyp, opt, device, tb_writer=None):
 
                 # Save last, best and delete
                 torch.save(ckpt, last)
+                write_ymir_training_result(ymir_cfg,
+                                           evaluation_result=dict(mAP=float(results[2]),
+                                                                  mAR=float(results[1]),
+                                                                  mAP50_95=float(results[3]),
+                                                                  P=float(results[0])),
+                                           id='last',
+                                           files=[str(last)])
                 if best_fitness == fi:
-                    torch.save(ckpt, best)
-                if (best_fitness == fi) and (epoch >= 200):
                     torch.save(ckpt, wdir / 'best_{:03d}.pt'.format(epoch))
+                    write_ymir_training_result(ymir_cfg,
+                                               evaluation_result=dict(mAP=float(results[2]),
+                                                                      mAR=float(results[1]),
+                                                                      mAP50_95=float(results[3]),
+                                                                      P=float(results[0])),
+                                               id='best',
+                                               files=[str(wdir / 'best_{:03d}.pt')])
                 if (epoch + 1) % opt.save_period == 0:
                     epoch_weight_file = wdir / 'epoch_{:03d}.pt'.format(epoch)
                     torch.save(ckpt, epoch_weight_file)
                     write_ymir_training_result(ymir_cfg,
-                                               map50=float(results[2]),
-                                               id=str(epoch),
+                                               evaluation_result=dict(mAP=float(results[2]),
+                                                                      mAR=float(results[1]),
+                                                                      mAP50_95=float(results[3]),
+                                                                      P=float(results[0])),
+                                               id=f'epoch_{epoch}',
                                                files=[str(epoch_weight_file)])
                 elif epoch >= (epochs - 5):
                     torch.save(ckpt, wdir / 'epoch_{:03d}.pt'.format(epoch))
@@ -538,7 +562,7 @@ def train(hyp, opt, device, tb_writer=None):
                     [wandb_logger.wandb.Image(str(save_dir / f), caption=f) for f in files if (save_dir / f).exists()]
                 })
         # Test best.pt
-        logger.info('%g epochs completed in %.3f hours.\n' % (epoch - start_epoch + 1, (time.time() - t0) / 3600))
+        logger.info('%g epochs completed in %.3f hours.\n' % (epochs - start_epoch + 1, (time.time() - t0) / 3600))
         if opt.data.endswith('coco.yaml') and nc == 80:  # if COCO
             for m in (last, best) if best.exists() else (last):  # speed, mAP tests
                 results, _, _ = test.test(opt.data,
